@@ -1,0 +1,78 @@
+/**
+ * Web API สำหรับดึงข้อมูลการอบรมจาก Google Sheets เพื่อนำไปแสดงผลบน Dashboard
+ */
+
+function doGet(e) {
+  try {
+    // 1. ระบุชื่อ Sheet ที่ใช้เก็บฐานข้อมูล (ตามขั้นตอนที่ 2 คือ 'Training')
+    const sheetName = "Training";
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = spreadsheet.getSheetByName(sheetName);
+
+    // ตรวจสอบว่าพบ Sheet หรือไม่
+    if (!sheet) {
+      return createJsonResponse({
+        status: "error",
+        message: `ไม่พบแผ่นงานชื่อ '${sheetName}'`
+      });
+    }
+
+    // 2. ดึงข้อมูลทั้งหมดใน Sheet
+    const data = sheet.getDataRange().getValues();
+
+    // ถ้าไม่มีข้อมูลเลย หรือมีแค่หัวตาราง
+    if (data.length <= 1) {
+      return createJsonResponse({
+        status: "success",
+        total: 0,
+        data: []
+      });
+    }
+
+    // 3. แยกหัวตาราง (Headers) ออกจากข้อมูล
+    const headers = data[0];
+    const rows = data.slice(1);
+
+    // 4. แปลงข้อมูลแต่ละแถวเป็น Array of Objects ตามหัวตาราง
+    const resultData = rows.map(row => {
+      let rowData = {};
+      headers.forEach((header, index) => {
+        let value = row[index];
+        
+        // ถ้าเป็นวัตถุวันที่ (Date Object) ให้แปลงเป็นข้อความ YYYY-MM-DD เพื่อความง่ายต่อการใช้งานบน Web
+        if (value instanceof Date) {
+          value = Utilities.formatDate(value, Session.getScriptTimeZone(), "yyyy-MM-dd");
+        }
+        
+        // ตัด space หน้า-หลังข้อความ
+        if (typeof value === "string") {
+          value = value.trim();
+        }
+
+        rowData[header] = value;
+      });
+      return rowData;
+    });
+
+    // 5. ส่งผลลัพธ์เป็น JSON
+    return createJsonResponse({
+      status: "success",
+      total: resultData.length,
+      data: resultData
+    });
+
+  } catch (error) {
+    return createJsonResponse({
+      status: "error",
+      message: error.toString()
+    });
+  }
+}
+
+/**
+ * ฟังก์ชันช่วยสร้าง Response รูปแบบ JSON และตั้งค่า CORS ให้เว็บอื่นเรียกใช้ได้
+ */
+function createJsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
